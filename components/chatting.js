@@ -3,6 +3,7 @@ const { MessageMedia, Location } = require("whatsapp-web.js");
 const request = require('request')
 const vuri = require('valid-url');
 const fs = require('fs');
+const multer = require('multer');
 
 const mediadownloader = (url, path, callback) => {
     request.head(url, (err, res, body) => {
@@ -66,43 +67,87 @@ router.post('/sendimage/:phone', async (req,res) => {
     }
 });
 
-router.post('/sendpdf/:phone', async (req,res) => {
-    var base64regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
+// router.post('/sendpdf/:phone', async (req,res) => {
+//     var base64regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
 
-    let phone = req.params.phone;
-    let pdf = req.body.pdf;
+//     let phone = req.params.phone;
+//     let pdf = req.body.pdf;
+//     console.log("pdf",pdf)
+//     if (phone == undefined || pdf == undefined) {
+//         res.send({ status: "error", message: "please enter valid phone and base64/url of pdf" })
+//     } else {
+//         if (base64regex.test(pdf)) {
+//             let media = new MessageMedia('application/pdf', pdf);
+//             client.sendMessage(`${phone}@c.us`, media).then((response) => {
+//                 if (response.id.fromMe) {
+//                     res.send({ status: 'success', message: `MediaMessage successfully sent to ${phone}` })
+//                 }
+//             });
+//         } else if (vuri.isWebUri(pdf)) {
+//             if (!fs.existsSync('./temp')) {
+//                 await fs.mkdirSync('./temp');
+//             }
 
-    if (phone == undefined || pdf == undefined) {
-        res.send({ status: "error", message: "please enter valid phone and base64/url of pdf" })
-    } else {
-        if (base64regex.test(pdf)) {
-            let media = new MessageMedia('application/pdf', pdf);
-            client.sendMessage(`${phone}@c.us`, media).then((response) => {
-                if (response.id.fromMe) {
-                    res.send({ status: 'success', message: `MediaMessage successfully sent to ${phone}` })
-                }
-            });
-        } else if (vuri.isWebUri(pdf)) {
-            if (!fs.existsSync('./temp')) {
-                await fs.mkdirSync('./temp');
-            }
-
-            var path = './temp/' + pdf.split("/").slice(-1)[0]
-            mediadownloader(pdf, path, () => {
-                let media = MessageMedia.fromFilePath(path);
-                client.sendMessage(`${phone}@c.us`, media).then((response) => {
-                    if (response.id.fromMe) {
-                        res.send({ status: 'success', message: `MediaMessage successfully sent to ${phone}` })
-                        fs.unlinkSync(path)
-                    }
-                });
-            })
-        } else {
-            res.send({ status: 'error', message: 'Invalid URL/Base64 Encoded Media' })
-        }
+//             var path = './temp/' + pdf.split("/").slice(-1)[0]
+//             mediadownloader(pdf, path, () => {
+//                 let media = MessageMedia.fromFilePath(path);
+//                 client.sendMessage(`${phone}@c.us`, media).then((response) => {
+//                     if (response.id.fromMe) {
+//                         res.send({ status: 'success', message: `MediaMessage successfully sent to ${phone}` })
+//                         fs.unlinkSync(path)
+//                     }
+//                 });
+//             })
+//         } else {
+//             res.send({ status: 'error', message: 'Invalid URL/Base64 Encoded Media' })
+//         }
+//     }
+// });
+const upload = multer({
+    dest: './temp/', // Temporary directory
+    limits: { fileSize: 10 * 1024 * 1024 }, // Limit file size to 10 MB
+  });
+  
+  router.post('/sendpdf/:phone', upload.single('pdfFile'), async (req, res) => {
+    const phone = req.params.phone;
+    const file = req.file;
+  
+    if (!phone || !file) {
+      return res.status(400).send({
+        status: 'error',
+        message: 'Phone number and PDF file are required.',
+      });
     }
-});
-
+  
+    try {
+      const media = MessageMedia.fromFilePath(file.path);
+      client.sendMessage(`${phone}@c.us`, media).then((response) => {
+        if (response.id.fromMe) {
+          fs.unlinkSync(file.path); // Cleanup the uploaded file
+          return res.send({
+            status: 'success',
+            message: `PDF successfully sent to ${phone}`,
+          });
+        }
+      }).catch((err) => {
+        fs.unlinkSync(file.path); // Cleanup the uploaded file on error
+        return res.status(500).send({
+          status: 'error',
+          message: 'Failed to send PDF via WhatsApp.',
+          error: err.message,
+        });
+      });
+    } catch (err) {
+      if (file && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path); // Cleanup the uploaded file on error
+      }
+      return res.status(500).send({
+        status: 'error',
+        message: 'An error occurred while processing the file.',
+        error: err.message,
+      });
+    }
+  });
 router.post('/sendlocation/:phone', async (req, res) => {
     let phone = req.params.phone;
     let latitude = req.body.latitude;
