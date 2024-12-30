@@ -1,5 +1,8 @@
 FROM node:12.22.0-buster
 
+WORKDIR /app
+COPY . /app/
+
 RUN apt-get update && \
   apt-get install -y \
   chromium \
@@ -13,7 +16,6 @@ COPY package.json .
 
 RUN npm install 
 
-COPY . .
 
 EXPOSE 5023
 
