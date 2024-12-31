@@ -1,22 +1,25 @@
-FROM node:12.22.0-buster
+FROM node:20-alpine
 
+# Install necessary dependencies
+RUN apk add --no-cache \
+    chromium \
+    libatk \
+    libxkbcommon \
+    wayland-libs-client \
+    gtk+3.0
+
+# Set working directory
 WORKDIR /app
-COPY . /app/
 
-RUN apt-get update && \
-  apt-get install -y \
-  chromium \
-  libatk-bridge2.0-0 \
-  libxkbcommon0 \
-  libwayland-client0 \
-  libgtk-3-0 && \
-  rm -rf /var/lib/apt/lists/*
-
+# Copy package.json and install dependencies
 COPY package.json .
+RUN npm install
 
-RUN npm install 
+# Copy the rest of your application code
+COPY . .
 
-
+# Expose the application port
 EXPOSE 3000
 
+# Run the application
 CMD ["npm", "start"]
